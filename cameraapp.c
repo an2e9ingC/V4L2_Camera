@@ -14,9 +14,19 @@
 #define WIDTH 640
 #define HEIGHT 480
 
+// #define PC
+
+
+#ifdef PC
+static char*  device_fname = "/dev/video1";
+#else
 static char*  device_fname = "/dev/video0";
-static char*  output_fname = "pic1.jpg";
+#endif
+
+static char*  output_fname_yuyv = "./pic/pic1.yuyv";
+static char*  output_fname_rgb = "./pic/pic1.rgb";
 static int fd = -1; //摄像头文件描述符
+static int wrfd = -1;
 static struct v4l2_capability cap;  //设备的属性
 typedef struct _buffer  //定义一个结构体来映射每个缓冲帧
 {
@@ -33,7 +43,7 @@ single_buff* frame_buf = NULL; //(用户空间)记录帧 映射到用户空间(�
 */
 struct v4l2_requestbuffers req_buffers;
 
-int open_file(const char*const file_name)
+int open_file(const char* const file_name)
 {
     int retfd =  open(file_name, O_RDWR);
     if(retfd < 0){
@@ -179,17 +189,21 @@ int memory_map(void)
     printf("Memory Mapping...\n");
     //  1.动态分配数组内存
     // calloc 分配count个缓冲帧, 每个大小为sizeof(*frame_buf), 即8byte(32bit系统)
-    frame_buf = (single_buff*) calloc (req_buffers.count, sizeof(*frame_buf));
+
+    // 这里可能有问题,sizeof(single_buff),而不是sizeof(*frame_buf)==4byte
+    // frame_buf = (single_buff*) calloc (req_buffers.count, sizeof(*frame_buf));
+    frame_buf = (single_buff*) calloc (req_buffers.count, sizeof(single_buff));
     if(frame_buf == NULL){
         perror("calloc:");
-        return -1;
+        exit -1;
     }else{
-        printf("calloc ok. buffers addr = %#x\n",frame_buf);
+        printf("calloc ok! \n用户空间:frame_buf addr = %#x\n",frame_buf);
     }
     //  2.映射,把所有的缓冲帧都分别映射到用户地址空间
     unsigned int i = 0;
+    struct v4l2_buffer  tmp_buf;    //驱动采集的某一帧
+    printf("申请的缓冲地址:\n");
     for(i; i < req_buffers.count; i++){
-        struct v4l2_buffer  tmp_buf;    //驱动采集的某一帧
         memset(&tmp_buf, 0, sizeof(tmp_buf));
         tmp_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         tmp_buf.memory = V4L2_MEMORY_MMAP;
@@ -198,12 +212,10 @@ int memory_map(void)
         //查询序号为i的缓冲区, 得到它的起始物理地址和大小,暂存到tmp_buf中
         if( -1 == ioctl(fd, VIDIOC_QUERYBUF, &tmp_buf)){
             perror("Memory Mappping--VIDIOC_QUERYBUF");
-            return -1;
+            exit -1;
         }
         // 保存长度
         frame_buf[i].length = tmp_buf.length;
-        printf("-----------------tmp_buf.length= %d------------\n", tmp_buf.length);
-        printf("frame_buf[%d].length = %u\n", i, frame_buf[i].length);
 
         //映射到frame_buf[i].start开始地址,映射到用户空间
         frame_buf[i].start =
@@ -215,31 +227,18 @@ int memory_map(void)
                 tmp_buf.m.offset);
         if( MAP_FAILED == frame_buf[i].start){
             printf("Memory Mappping--mmap failed.\n");
-            return -1;
+            exit -1;
         }
         printf("buffers[%d].start = %#x\n", i, frame_buf[i].start);
-    }
-}
 
-int add_to_input_queue(void)
-{//把缓冲帧 放入 驱动是视频输入队列
-    printf("Adding Frame to Input Queues......\n");
-    unsigned int i;
-
-    //加入输入队列
-    for(i; i < req_buffers.count; i++){
-        struct v4l2_buffer  tmp_buf;
-        memset(&tmp_buf, 0, sizeof(tmp_buf));
-        tmp_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        tmp_buf.memory = V4L2_MEMORY_MMAP;
-
-        tmp_buf.index = i;
+        //把入队放在每个申请内存后就操作,而不是单独
         if( ioctl(fd, VIDIOC_QBUF, &tmp_buf) < 0){
             perror("Adding to Input Queues");
-            return -1;
+            exit -1;
         }
     }
-    return 0;
+    printf("-----------------tmp_buf.length= %d------------\n", tmp_buf.length);
+
 }
 
 
@@ -261,7 +260,7 @@ int start_capture(void)
     ret  = ioctl(fd, VIDIOC_STREAMON, &type);
     if(ret < 0){
         perror("Starting captureing--VIDIOC_STREAMON");
-        return ret;
+        exit -1;
     }
     return ret;
 }
@@ -278,25 +277,21 @@ int process_image(void)
     */
     printf("Processing Image......\n");
     struct v4l2_buffer  tmp_buf;
-    memset(&tmp_buf, 0, sizeof(tmp_buf));
+    // memset(&tmp_buf, 0, sizeof(tmp_buf));
     tmp_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    printf("清空后的buffer类型:%d\n", tmp_buf.type);
     tmp_buf.memory = V4L2_MEMORY_MMAP;
+    // tmp_buf.index =
     printf("---------------------------------------\n");
 
-    ioctl(fd, VIDIOC_DQBUF, &tmp_buf);
-    printf("序号:%u\n", tmp_buf.index);
-    printf("buffer类型:%d\n", tmp_buf.type);
-    printf("bytesused:%u\n", tmp_buf.bytesused);
-    printf("flags:%u\n", tmp_buf.flags);
-    printf("sequence队列序号:%u\n", tmp_buf.sequence);
-    printf("缓冲帧地址 :%u\n", tmp_buf.m.offset);
-    printf("缓冲帧length:%u\n", tmp_buf.length);
+    if(ioctl(fd, VIDIOC_DQBUF, &tmp_buf) < 0){
+        perror("VIDIOC_DQBUF");
+        exit -1;
+    }
 
-    int wrfd = open(output_fname, O_RDWR | O_CREAT, 0777);
+    wrfd = open(output_fname_yuyv, O_RDWR | O_CREAT, 0777);
     if(wrfd < 0){
         perror("output file open");
-        return -1;
+        exit -1;
     }
 
     /*
@@ -318,8 +313,6 @@ int process_image(void)
     return 0;
 }
 
-
-
 int stop_capture(void)
 {// 停止采集
     /**
@@ -336,16 +329,22 @@ int stop_capture(void)
     return 0;
 }
 
-
 void close_device(void)
 {//关闭设备
     printf("Closing Device fd = %d...\n", fd);
     int i = 0;
+
+    //取消映射
     for(i; i < req_buffers.count; i++){
-        munmap(NULL, frame_buf[i].length);
+        if(munmap(frame_buf[i].start, frame_buf[i].length)<0){
+            perror("munmap");
+            exit -1;
+        }
     }
+
     stop_capture();
 	close(fd);
+    close(wrfd);
     free(frame_buf);
 }
 
@@ -373,60 +372,21 @@ int main(int argc, char* argv[])
         printf("File open successfully... fd = %d\n", fd );
     }
 
-    // /*2. 查看设备能力,是否有音视频输入输出?(VIDIOC_QUERYCAP：查询驱动功能)*/
-    // check_device_info();
-    // get_current_frame_fmt();
-
-    printf("xxxxxxxxxxxxxxxxxxxxxx\n" );
-    // struct v4l2_input cinput;
-    // memset(&cinput, 0, sizeof(cinput));
-
-    // ioctl(fd, VIDIOC_G_INPUT, &cinput.index);//首先获得当前输入的 index,注意只是 index，要获得具体的信息，就的调用列举操作
-    // ioctl (fd, VIDIOC_ENUMINPUT, &cinput);//调用列举操作，获得 input.index 对应的输入的具体信息
-    // printf("Current input is '%s', supports: \n", cinput.name);
-    // std.index = 0;
-    // while (0==ioctl(fd, VIDIOC_ENUMINPUT, &std)) {
-    //     if(std.id & cinput.std)
-    //         printf("%s\n", std.name);
-    //     std.index ++;
-    // }
-    // printf("Now input index is : %u\n", cinput.index);
-    // v4l2_std_id std_id;
-    // struct v4l2_standard std;
-    // if(ioctl(fd, VIDIOC_G_STD, &std_id) == -1){
-    //     perror("VIDIOC_G_STD");
-    //     exit(-1);
-    // }
-    // memset(&std, 0, sizeof(std));
-    // std.index = 0;
-    // while( 0==ioctl(fd, VIDIOC_ENUMSTD, &std) ){
-    //     if(std.id & std_id){
-    //         printf("Current Standard : %s\n", std.name);
-    //         break;
-    //     }
-    //     std.index++;
-    // }
-    //
-    // if(errno == EINVAL || std.index == 0 ){
-    //     perror("VIDIOC_ENUMSTD");
-    //     return -1;
-    // }
-    //
-    // printf("xxxxxxxxxxxxxxxxxxxxxx\n" );
+    /*2. 查看设备能力,是否有音视频输入输出?(VIDIOC_QUERYCAP：查询驱动功能)*/
+    check_device_info();
 
     // /*3. 设备初始化*/
     device_init();
 
     /*4. 把缓存帧添加到缓冲队列*/
-    add_to_input_queue();      //之前没有把缓冲帧加入到 输入队列
+    // add_to_input_queue();      //之前没有把缓冲帧加入到 输入队列
 
     /*4. 开始获取图像*/
     start_capture();
+
     /*5. 处理图片*/
     process_image();
-    unsigned int i = 0xffffff;
-    while(i--);
-    process_image();
+
 
     /*6. 关闭设备*/
     close_device();
