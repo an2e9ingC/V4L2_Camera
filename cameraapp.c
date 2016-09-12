@@ -10,21 +10,51 @@
 #include <errno.h>
 #include <sys/mman.h>
 
+// #include "setjmp.h"
+// #include "jpeglib.h"
+// #include "sys/types.h"	//size_t
+// #include "jerror.h"
+#define HEADER
+#ifdef HEADER
+typedef struct _bit_map_file_header{
+     unsigned int    bfType;                // the flag of bmp, value is "BM"
+     unsigned int    bfSize;                // size BMP file ,unit is bytes
+     unsigned int    bfReserved;            // 0
+     unsigned int    bfOffBits;             // must be 54
+
+}bit_map_file_header;
+
+typedef struct _tag_bit_map_info_header{
+     unsigned int    biSize;                // must be 0x28
+     unsigned int    biWidth;           //
+     unsigned int    biHeight;          //
+     unsigned int        biPlanes;          // must be 1
+     unsigned int        biBitCount;            //
+     unsigned int    biCompression;         //
+     unsigned int    biSizeImage;       //
+     unsigned int    biXPelsPerMeter;   //
+     unsigned int    biYPelsPerMeter;   //
+     unsigned int    biClrUsed;             //
+     unsigned int    biClrImportant;        //
+}bit_map_info_header;
+#endif
+
+
 #define REQ_BUFF_COUNT 5
 #define WIDTH 640
 #define HEIGHT 480
 
-// #define PC
+#define PC_DEBUG
 
-
-#ifdef PC
+#ifdef PC_DEBUG
 static char*  device_fname = "/dev/video1";
 #else
 static char*  device_fname = "/dev/video0";
 #endif
 
-static char*  output_fname_yuyv = "./pic/pic1.yuyv";
-static char*  output_fname_rgb = "./pic/pic1.rgb";
+static char*  output_fname_yuyv = "./pic/pic1.YUV";
+static char*  output_fname_rgb_bmp = "./pic/pic1.bmp";
+
 static int fd = -1; //摄像头文件描述符
 static int wrfd = -1;
 static struct v4l2_capability cap;  //设备的属性
@@ -185,7 +215,7 @@ int request_buffers(int cnt)
 }
 
 int memory_map(void)
-{//映射地址, 获取缓冲帧的地址和长度
+ {//映射地址, 获取缓冲帧的地址和长度
     printf("Memory Mapping...\n");
     //  1.动态分配数组内存
     // calloc 分配count个缓冲帧, 每个大小为sizeof(*frame_buf), 即8byte(32bit系统)
@@ -197,7 +227,8 @@ int memory_map(void)
         perror("calloc:");
         exit -1;
     }else{
-        printf("calloc ok! \n用户空间:frame_buf addr = %#x\n",frame_buf);
+        printf("calloc ok! \n用户空间:frame_buf addr = %p\n",frame_buf);
+        printf("用户空间:frame_buf addr = %p\n",frame_buf);
     }
     //  2.映射,把所有的缓冲帧都分别映射到用户地址空间
     unsigned int i = 0;
@@ -229,7 +260,7 @@ int memory_map(void)
             printf("Memory Mappping--mmap failed.\n");
             exit -1;
         }
-        printf("buffers[%d].start = %#x\n", i, frame_buf[i].start);
+        printf("buffers[%d].start = %p\n", i, frame_buf[i].start);
 
         //把入队放在每个申请内存后就操作,而不是单独
         if( ioctl(fd, VIDIOC_QBUF, &tmp_buf) < 0){
@@ -265,9 +296,105 @@ int start_capture(void)
     return ret;
 }
 
+// JSAMPLE * image_buffer;	/* Points to large array of R,G,B-order data */
+// int image_height = WIDTH;	/* Number of rows in image */
+// int image_width = HEIGHT;		/* Number of columns in image */
+//
+// void write_JPEG_file (char * filename, int quality)
+// {
+//     printf("----------------------1-----------------\n");
+//
+//     /* This struct contains the JPEG compression parameters and pointers to
+//     * working space (which is allocated as needed by the JPEG library).
+//     * It is possible to have several such structures, representing multiple
+//     * compression/decompression processes, in existence at once.  We refer
+//     * to any one struct (and its associated working data) as a "JPEG object".
+//     */
+//     struct jpeg_compress_struct cinfo;
+//     /* This struct represents a JPEG error handler.  It is declared separately
+//     * because applications often want to supply a specialized error handler
+//     * (see the second half of this file for an example).  But here we just
+//     * take the easy way out and use the standard error handler, which will
+//     * print a message on stderr and call exit() if compression fails.
+//     * Note that this struct must live as long as the main JPEG parameter
+//     * struct, to avoid dangling-pointer problems.
+//     */
+//     struct jpeg_error_mgr jerr;
+//
+//     /* More stuff */
+//     FILE * outfile;	    /* target file */
+//     JSAMPROW row_pointer[1];	/* pointer to JSAMPLE row[s],pointer to a single row*/
+//     int row_stride;	    /* physical row width in image buffer */
+//
+//     /* Step 1: allocate and initialize JPEG compression object */
+//
+//     /* We have to set up the error handler first, in case the initialization
+//     * step fails.  (Unlikely, but it could happen if you are out of memory.)
+//     * This routine fills in the contents of struct jerr, and returns jerr's
+//     * address which we place into the link field in cinfo.
+//     */
+//     cinfo.err = jpeg_std_error(&jerr);
+//     printf("--------------------2-------------------\n");
+//
+//     /* Now we can initialize the JPEG compression object. */
+//     jpeg_create_compress(&cinfo);
+//
+//     /* Step 2: specify data destination (eg, a file) */
+//     /* Note: steps 2 and 3 can be done in either order. */
+//     if ((outfile = fopen(filename, "wb")) == NULL) {
+//         fprintf(stderr, "can't open %s\n", filename);
+//         exit(1);
+//     }
+//     printf("-------------------3--------------------\n");
+//
+//     jpeg_stdio_dest(&cinfo, outfile);
+//     printf("-------------------4--------------------\n");
+//
+//     /* Step 3: set parameters for compression */
+//     cinfo.image_width = image_width; 	/* image width and height, in pixels */
+//     cinfo.image_height = image_height;
+//     cinfo.input_components = 3;		/* # of color components per pixel */
+//     cinfo.in_color_space = JCS_RGB; 	/* colorspace of input image */
+//
+//     jpeg_set_defaults(&cinfo);
+//     printf("--------------------5-------------------\n");
+//
+//     jpeg_set_quality(&cinfo, quality, TRUE /* limit to baseline-JPEG values */);
+//     printf("-------------------6--------------------\n");
+//
+//     /* Step 4: Start compressor */
+//     jpeg_start_compress(&cinfo, TRUE);
+//     printf("--------------------7-------------------\n");
+//
+//     /* Step 5: while (scan lines remain to be written) */
+//     /*           jpeg_write_scanlines(...); */
+//
+//     row_stride = image_width * 3;	/* JSAMPLEs per row in image_buffer */
+//
+//     while (cinfo.next_scanline < cinfo.image_height) {
+//         row_pointer[0] = & image_buffer[cinfo.next_scanline * row_stride];
+//         if(jpeg_write_scanlines(&cinfo, row_pointer, 1) <0 ){
+//             perror("jpeg_write_scanlines");
+//             exit(-1);
+//         }
+//     }
+//     printf("----------------------8-----------------\n");
+//
+//     /* Step 6: Finish compression */
+//
+//     jpeg_finish_compress(&cinfo);
+//     fclose(outfile);
+//     printf("---------------------9------------------\n");
+//
+//     /* Step 7: release JPEG compression object */
+//     jpeg_destroy_compress(&cinfo);
+//     printf("----------------------10-----------------\n");
+//
+// }
+//
 
-int process_image(void)
-{//处理采集到的帧
+int save_to_yuyv(void)
+ {//处理采集到的帧
     /**
         数据处理:
         1.  从输出队列output_queues取出存有视频的帧缓冲req_buffers[i]: VIDIOC_DQBUF
@@ -275,12 +402,11 @@ int process_image(void)
         3.  处理完后, 将该帧缓冲req_buffers[i] 重新放回输入队列input_queues: VIDIOC_QBUF
         start_capture(); 和 process_image(); 应放在一起实现循环采集处理
     */
-    printf("Processing Image......\n");
+    printf("save_to_yuyv.....\n");
     struct v4l2_buffer  tmp_buf;
     // memset(&tmp_buf, 0, sizeof(tmp_buf));
     tmp_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     tmp_buf.memory = V4L2_MEMORY_MMAP;
-    // tmp_buf.index =
     printf("---------------------------------------\n");
 
     if(ioctl(fd, VIDIOC_DQBUF, &tmp_buf) < 0){
@@ -298,20 +424,150 @@ int process_image(void)
     问题出现这里, 写的内容要从frame_buf[]这个数组中读取,而不是tmp_buf!!!
     */
     ssize_t wrsize = write(wrfd, frame_buf[0].start, frame_buf->length);
-    printf("wrsize = %d kB\n", wrsize/1024);
-
+    printf("wrsize = %ld kB\n", wrsize/1024);
 
     printf("---------------------------------------\n");
 
     //将取出的帧放回队列
     if( ioctl(fd, VIDIOC_QBUF, &tmp_buf)  < 0){
-        perror("Processing Image--VIDIOC_QBUF");
+        perror("save_to_yuyv--VIDIOC_QBUF");
         return -1;
     }
 
-    printf("Processed Image ok......\n");
+    printf("save_to_yuyv ok......\n");
     return 0;
 }
+
+
+int yuyv_to_rgb_pixel(int y, int u, int v)
+{//根据输入的y,u,v分量,把yuyv转化为rgb格式的像素, 返回一个32bit像素的图像
+    unsigned int pixel32 =  0;  //保存32bit的像素,用4byte的int保存
+    unsigned char *pixel = (unsigned char*)&pixel32;    //把32bit的分成4份,用char*来指向
+
+    int r,g,b;
+    r = y + 1.4075 *(v-128);
+    g = y - 0.3455 *(u-128) - 0.7169*(v-128);
+    b = y + 1.779 *(u-128);
+    if(r>255) r = 255;
+    if(g>255) g = 255;
+    if(b>255) b = 255;
+    if(r<0) r = 0;
+    if(g<0) g = 0;
+    if(b<0) b = 0;
+
+    pixel[0] = r;
+    pixel[1] = g;
+    pixel[2] = b;
+
+    return pixel32;
+}
+
+int yuyv_to_rgb_buffer(unsigned char*yuv, unsigned char*rgb,
+    unsigned int width, unsigned int height)
+{//根据YUYV图片的一个像素信息yuv(4byte)和图片的width,height,放到rgb的缓存rgb中.
+    unsigned int in,out = 0;
+    unsigned int pixel16;
+    unsigned char pixel24[3];   //3byte的像素
+    unsigned int pixel32;
+
+    int y0, u, y1, v;   //这是连续2个YUYV像素的码流状态
+
+    //循环把2个yuyv码转化成2个rgb24的像素
+    for(in = 0; in < width*height*2; in+=4){
+        pixel16 =   yuv[in+3] << 24 |
+                    yuv[in+2] << 16 |
+                    yuv[in+1] << 8 |
+                    yuv[in+0];  //把yuyv422的Y0,U0,Y1,V1先放到一个4byte的中转空间
+        //然后中转空间的各个为取出,放到y,u,v
+        y0 = (pixel16 & 0x000000ff);
+        u = (pixel16 & 0x0000ff00) >> 8;
+        y1 = (pixel16 & 0x00ff0000) >> 16;
+        v = (pixel16 & 0xff000000) >> 24;
+
+        pixel32 = yuyv_to_rgb_pixel(y0, u, v);  //生成前一个rgb像素
+
+        pixel24[0] = (pixel32 & 0x000000ff);
+        pixel24[1] = (pixel32 & 0x0000ff00) >> 8;
+        pixel24[2] = (pixel32 & 0x00ff0000) >> 16;
+
+        rgb[out++] = pixel24[0];
+        rgb[out++] = pixel24[1];
+        rgb[out++] = pixel24[2];
+
+        pixel32 = yuyv_to_rgb_pixel(y1,u,v); //生成后一个rgb像素
+        pixel24[0] = (pixel32 & 0x000000ff);
+        pixel24[1] = (pixel32 & 0x0000ff00) >> 8;
+        pixel24[2] = (pixel32 & 0x00ff0000) >> 16;
+        rgb[out++] = pixel24[0];
+        rgb[out++] = pixel24[1];
+        rgb[out++] = pixel24[2];
+    }
+
+    return 0;
+}
+
+int yuyv_to_rgb24(void)
+{// 把yuyv格式的图片转换成RGB24格式
+    FILE* yuyv_fp =  fopen(output_fname_yuyv, "rb");
+    if(yuyv_fp == NULL){
+        perror("open yuyvfd");
+        exit(EXIT_FAILURE);
+    }
+    FILE* rgb_fp =  fopen(output_fname_rgb_bmp, "wb+");
+    if(rgb_fp == NULL){
+        perror("open rgb_fp");
+        exit(EXIT_FAILURE);
+    }
+    printf("yuyv_to_rgb24: open file ok.\n");
+
+    unsigned int yuyv_size = WIDTH*HEIGHT*2;
+    unsigned int rgb_size = WIDTH*HEIGHT*3;
+    unsigned char yuyv_buf[yuyv_size];  //缓存YUYV数据
+    unsigned char rgb_buf[rgb_size+54];    //缓存RGB数据,3中颜色+54个字节的文件头
+
+    //读
+    size_t rdsz = fread(yuyv_buf, sizeof(yuyv_buf[0]), yuyv_size, yuyv_fp);
+    if(rdsz < 0){
+        printf("read nothing.\n");
+        return -1;
+    }else{
+        printf("read %ld kB.\n",rdsz/1024 );
+    }
+
+    yuyv_to_rgb_buffer(yuyv_buf, rgb_buf, WIDTH, HEIGHT);   //把yuyv转化为rgb格式
+
+    //添加文件头
+    bit_map_file_header bf;
+    bit_map_info_header bi;
+
+    //Set bit_map_info_header
+    bi.biSize = 40;
+    bi.biWidth = WIDTH;
+    bi.biHeight = HEIGHT;
+    bi.biPlanes = 1;
+    bi.biBitCount = 24;
+    bi.biCompression = 0;
+    bi.biSizeImage = WIDTH*HEIGHT*3;
+    bi.biXPelsPerMeter = 0;
+    bi.biYPelsPerMeter = 0;
+    bi.biClrUsed = 0;
+    bi.biClrImportant = 0;
+    //Set bit_map_file_header
+    bf.bfType = 0x4d42;
+    bf.bfSize = 54 + bi.biSizeImage;
+    bf.bfReserved = 0;
+    bf.bfOffBits = 54;
+
+    fwrite(&bf, 14, 1, rgb_fp);
+    fwrite(&bi, 40, 1, rgb_fp);
+    size_t wrsz = fwrite(rgb_buf, rgb_size+54, 1, rgb_fp);
+    printf("wrsz = %ld kB\n", wrsz/1024 + 54);
+
+    fclose(yuyv_fp);
+    fclose(rgb_fp);
+
+}
+
 
 int stop_capture(void)
 {// 停止采集
@@ -378,14 +634,12 @@ int main(int argc, char* argv[])
     // /*3. 设备初始化*/
     device_init();
 
-    /*4. 把缓存帧添加到缓冲队列*/
-    // add_to_input_queue();      //之前没有把缓冲帧加入到 输入队列
-
     /*4. 开始获取图像*/
     start_capture();
 
     /*5. 处理图片*/
-    process_image();
+    save_to_yuyv();
+    yuyv_to_rgb24();
 
 
     /*6. 关闭设备*/

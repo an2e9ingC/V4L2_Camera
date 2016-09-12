@@ -1,0 +1,89 @@
+IJG 独立JPEG处理库
+1.编译库环境流程
+Try doing
+	./configure
+	make
+	make test
+If that doesn't complain, do
+	make install (这里make时 需要root权限)
+	
+2. 静态库/动态库:
+* Configure will build both static and shared libraries, if possible.(编译会同时生成静态和共享库)
+If you want to build libjpeg only as a static library, say
+	./configure --disable-shared (只生成静态库)
+If you want to build libjpeg only as a shared library, say
+	./configure --disable-static (只生成动态库)
+Configure uses GNU libtool to take care of system-dependent shared library
+building methods.
+
+3. 文件的安装位置/usr/local/bin, /usr/local/man
+* Configure will set up the makefile so that "make install" will install files
+into /usr/local/bin, /usr/local/man, etc.  You can specify an installation
+prefix other than "/usr/local" by giving configure the option 
+"--prefix=PATH".
+
+4. 除非是很大的图片, 不需要担心swap空间问题
+* If you don't have a lot of swap space, you may need to enable the IJG
+software's internal virtual memory mechanism.  To do this, give the option
+"--enable-maxmem=N" 
+where N is the default maxmemory limit in megabytes.
+
+5. 手动生成jconfig.h
+详见install.txt , jconfig.txt(高手才看得懂), 或者use the ckconfig.c program.
+
+6.命令行支持Unix-like风格, 支持重定向和piping
+	cjpeg inputfile >outputfile
+	cjpeg <inputfile >outputfile
+	source program | cjpeg >outputfile
+The simpler "two file" command line style is just
+	cjpeg inputfile outputfile
+尤其是在对通过stdin,stout传输二进制数据的系统(MS), 必须使用2个文件的风格(因为管道,从定向可能不支持)
+
+7. 选择内存管理员
+The IJG code is capable 能胜任的; of working on images that are too big to fit in main
+memory; data is swapped out to temporary files as necessary.(超出main内存的数据会外放到临时的文件)
+不同的系统有不同的选择, linux这里选择
+* jmemname.c	This version creates named temporary files.  For anything
+		except a Unix machine, you'll need to configure the
+		select_file_name() routine appropriately; see the comments
+		near the head of jmemname.c.  If you use this version, define
+		NEED_SIGNAL_CATCHER in jconfig.h to make sure the temp files
+		are removed if the program is aborted.
+		
+		
+
+8. Support for 12-bit-deep pixel data:
+支持8-12bit深度的像素数据
+注意: 12bit的版本无法读取8bit的JPEG文件,反之亦然.
+
+9. 图片文件格式：
+PPM (Portable PixMap)
+PGM (Portable GreyMap)
+PBM (Portable BitMap) files.
+
+10. 相关格式文件的读取方法:
+	1.PPM reader (rdppm.c)
+		12-bit data from either text-format or binary-format PPM and PGM files.
+		
+		
+
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		

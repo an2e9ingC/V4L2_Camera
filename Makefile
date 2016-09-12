@@ -1,4 +1,3 @@
-
 all:
 	gcc cameraapp.c -o a.out
 	arm-none-linux-gnueabi-gcc cameraapp.c -o camera.app
