@@ -10,39 +10,49 @@
 #include <errno.h>
 #include <sys/mman.h>
 
-// #include "setjmp.h"
-// #include "jpeglib.h"
-// #include "sys/types.h"	//size_t
-// #include "jerror.h"
-#define HEADER
-#ifdef HEADER
-typedef struct _bit_map_file_header{
-     unsigned int    bfType;                // the flag of bmp, value is "BM"
-     unsigned int    bfSize;                // size BMP file ,unit is bytes
-     unsigned int    bfReserved;            // 0
-     unsigned int    bfOffBits;             // must be 54
-
-}bit_map_file_header;
-
-typedef struct _tag_bit_map_info_header{
-     unsigned int    biSize;                // must be 0x28
-     unsigned int    biWidth;           //
-     unsigned int    biHeight;          //
-     unsigned int        biPlanes;          // must be 1
-     unsigned int        biBitCount;            //
-     unsigned int    biCompression;         //
-     unsigned int    biSizeImage;       //
-     unsigned int    biXPelsPerMeter;   //
-     unsigned int    biYPelsPerMeter;   //
-     unsigned int    biClrUsed;             //
-     unsigned int    biClrImportant;        //
-}bit_map_info_header;
-#endif
-
-
 #define REQ_BUFF_COUNT 5
 #define WIDTH 640
 #define HEIGHT 480
+
+#define JPG_COMPRESS
+#define BMP_HEADER
+
+#ifdef BMP_HEADER
+#define WORD unsigned short
+#define DWORD unsigned long
+typedef struct tagBITMAPFILEHEADER{
+    WORD    bfType;                // the flag of bmp, value is "BM"
+    DWORD    bfSize;                // size BMP file ,unit is bytes
+    DWORD    bfReserved;            // 0
+    DWORD    bfOffBits;             // must be 54
+
+}bit_map_file_header;
+
+typedef struct tagBITMAPINFOHEADER{
+    DWORD    biSize;                // must be 0x28
+    DWORD    biWidth;           //
+    DWORD    biHeight;          //
+    WORD     biPlanes;          // must be 1
+    WORD     biBitCount;            //
+    DWORD    biCompression;         //
+    DWORD    biSizeImage;       //
+    DWORD    biXPelsPerMeter;   //
+    DWORD    biYPelsPerMeter;   //
+    DWORD    biClrUsed;             //
+    DWORD    biClrImportant;        //
+}bit_map_info_header;
+#endif
+
+#ifdef JPG_COMPRESS
+#include "setjmp.h"
+#include "jpeglib.h"
+#include "sys/types.h"	//size_t
+#include "jerror.h"
+#define JPEG_QUALITY 50 //图片质量
+JSAMPLE * image_buffer;	/* Points to large array of R,G,B-order data */
+int image_height = HEIGHT;	/* Number of rows in image */
+int image_width = WIDTH;		/* Number of columns in image */
+#endif
 
 #define PC_DEBUG
 
@@ -54,6 +64,7 @@ static char*  device_fname = "/dev/video0";
 
 static char*  output_fname_yuyv = "./pic/pic1.YUV";
 static char*  output_fname_rgb_bmp = "./pic/pic1.bmp";
+static char*  output_fname_jpg = "./pic/pic1.jpg";
 
 static int fd = -1; //摄像头文件描述符
 static int wrfd = -1;
@@ -296,102 +307,6 @@ int start_capture(void)
     return ret;
 }
 
-// JSAMPLE * image_buffer;	/* Points to large array of R,G,B-order data */
-// int image_height = WIDTH;	/* Number of rows in image */
-// int image_width = HEIGHT;		/* Number of columns in image */
-//
-// void write_JPEG_file (char * filename, int quality)
-// {
-//     printf("----------------------1-----------------\n");
-//
-//     /* This struct contains the JPEG compression parameters and pointers to
-//     * working space (which is allocated as needed by the JPEG library).
-//     * It is possible to have several such structures, representing multiple
-//     * compression/decompression processes, in existence at once.  We refer
-//     * to any one struct (and its associated working data) as a "JPEG object".
-//     */
-//     struct jpeg_compress_struct cinfo;
-//     /* This struct represents a JPEG error handler.  It is declared separately
-//     * because applications often want to supply a specialized error handler
-//     * (see the second half of this file for an example).  But here we just
-//     * take the easy way out and use the standard error handler, which will
-//     * print a message on stderr and call exit() if compression fails.
-//     * Note that this struct must live as long as the main JPEG parameter
-//     * struct, to avoid dangling-pointer problems.
-//     */
-//     struct jpeg_error_mgr jerr;
-//
-//     /* More stuff */
-//     FILE * outfile;	    /* target file */
-//     JSAMPROW row_pointer[1];	/* pointer to JSAMPLE row[s],pointer to a single row*/
-//     int row_stride;	    /* physical row width in image buffer */
-//
-//     /* Step 1: allocate and initialize JPEG compression object */
-//
-//     /* We have to set up the error handler first, in case the initialization
-//     * step fails.  (Unlikely, but it could happen if you are out of memory.)
-//     * This routine fills in the contents of struct jerr, and returns jerr's
-//     * address which we place into the link field in cinfo.
-//     */
-//     cinfo.err = jpeg_std_error(&jerr);
-//     printf("--------------------2-------------------\n");
-//
-//     /* Now we can initialize the JPEG compression object. */
-//     jpeg_create_compress(&cinfo);
-//
-//     /* Step 2: specify data destination (eg, a file) */
-//     /* Note: steps 2 and 3 can be done in either order. */
-//     if ((outfile = fopen(filename, "wb")) == NULL) {
-//         fprintf(stderr, "can't open %s\n", filename);
-//         exit(1);
-//     }
-//     printf("-------------------3--------------------\n");
-//
-//     jpeg_stdio_dest(&cinfo, outfile);
-//     printf("-------------------4--------------------\n");
-//
-//     /* Step 3: set parameters for compression */
-//     cinfo.image_width = image_width; 	/* image width and height, in pixels */
-//     cinfo.image_height = image_height;
-//     cinfo.input_components = 3;		/* # of color components per pixel */
-//     cinfo.in_color_space = JCS_RGB; 	/* colorspace of input image */
-//
-//     jpeg_set_defaults(&cinfo);
-//     printf("--------------------5-------------------\n");
-//
-//     jpeg_set_quality(&cinfo, quality, TRUE /* limit to baseline-JPEG values */);
-//     printf("-------------------6--------------------\n");
-//
-//     /* Step 4: Start compressor */
-//     jpeg_start_compress(&cinfo, TRUE);
-//     printf("--------------------7-------------------\n");
-//
-//     /* Step 5: while (scan lines remain to be written) */
-//     /*           jpeg_write_scanlines(...); */
-//
-//     row_stride = image_width * 3;	/* JSAMPLEs per row in image_buffer */
-//
-//     while (cinfo.next_scanline < cinfo.image_height) {
-//         row_pointer[0] = & image_buffer[cinfo.next_scanline * row_stride];
-//         if(jpeg_write_scanlines(&cinfo, row_pointer, 1) <0 ){
-//             perror("jpeg_write_scanlines");
-//             exit(-1);
-//         }
-//     }
-//     printf("----------------------8-----------------\n");
-//
-//     /* Step 6: Finish compression */
-//
-//     jpeg_finish_compress(&cinfo);
-//     fclose(outfile);
-//     printf("---------------------9------------------\n");
-//
-//     /* Step 7: release JPEG compression object */
-//     jpeg_destroy_compress(&cinfo);
-//     printf("----------------------10-----------------\n");
-//
-// }
-//
 
 int save_to_yuyv(void)
  {//处理采集到的帧
@@ -506,6 +421,27 @@ int yuyv_to_rgb_buffer(unsigned char*yuv, unsigned char*rgb,
     return 0;
 }
 
+void set_bmp_header(bit_map_file_header *bf, bit_map_info_header *bi)
+{
+    //Set bit_map_info_header
+    bi->biSize = 40;
+    bi->biWidth = WIDTH;
+    bi->biHeight = HEIGHT;
+    bi->biPlanes = 1;
+    bi->biBitCount = 24;
+    bi->biCompression = 0;
+    bi->biSizeImage = WIDTH*HEIGHT*3;
+    bi->biXPelsPerMeter = 0;
+    bi->biYPelsPerMeter = 0;
+    bi->biClrUsed = 0;
+    bi->biClrImportant = 0;
+    //Set bit_map_file_header
+    bf->bfType = 0x4d42;
+    bf->bfSize = 54 + bi->biSizeImage;
+    bf->bfReserved = 0;
+    bf->bfOffBits = 54;
+}
+
 int yuyv_to_rgb24(void)
 {// 把yuyv格式的图片转换成RGB24格式
     FILE* yuyv_fp =  fopen(output_fname_yuyv, "rb");
@@ -539,29 +475,13 @@ int yuyv_to_rgb24(void)
     //添加文件头
     bit_map_file_header bf;
     bit_map_info_header bi;
+    set_bmp_header(&bf, &bi);
 
-    //Set bit_map_info_header
-    bi.biSize = 40;
-    bi.biWidth = WIDTH;
-    bi.biHeight = HEIGHT;
-    bi.biPlanes = 1;
-    bi.biBitCount = 24;
-    bi.biCompression = 0;
-    bi.biSizeImage = WIDTH*HEIGHT*3;
-    bi.biXPelsPerMeter = 0;
-    bi.biYPelsPerMeter = 0;
-    bi.biClrUsed = 0;
-    bi.biClrImportant = 0;
-    //Set bit_map_file_header
-    bf.bfType = 0x4d42;
-    bf.bfSize = 54 + bi.biSizeImage;
-    bf.bfReserved = 0;
-    bf.bfOffBits = 54;
 
     fwrite(&bf, 14, 1, rgb_fp);
     fwrite(&bi, 40, 1, rgb_fp);
-    size_t wrsz = fwrite(rgb_buf, rgb_size+54, 1, rgb_fp);
-    printf("wrsz = %ld kB\n", wrsz/1024 + 54);
+    size_t wrsz = fwrite(rgb_buf, rgb_size, 1, rgb_fp);
+    printf("wrsz = %ld kB\n", (wrsz));
 
     fclose(yuyv_fp);
     fclose(rgb_fp);
@@ -616,6 +536,103 @@ int device_init()
     memory_map();
 }
 
+
+/*
+ * Sample routine for JPEG compression.  We assume that the target file name
+ * and a compression quality factor are passed in.
+ */
+
+GLOBAL(void)
+write_JPEG_file (char* bmp_filename, char * jpg_filename, int quality)
+{
+    struct jpeg_compress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+    int ret;
+    FILE * outfile;		/* target file */
+    JSAMPROW row_pointer[1];	/* pointer to JSAMPLE row[s] */
+    int row_stride;		/* physical row width in image buffer */
+
+    FILE* infile = fopen(bmp_filename, "rb");
+    image_buffer = (unsigned char*)malloc(WIDTH*HEIGHT*3);
+    if(infile == NULL){
+        printf("ERROR1: Can not open the image.\n");
+        free(image_buffer);
+        exit(EXIT_FAILURE);
+    }
+    //    跳过bmp文件头，直接读取掌纹图像数据, 放到image_buffer
+    fseek(infile, 54, SEEK_SET);
+    ret = fread(image_buffer, sizeof(unsigned char)*WIDTH*HEIGHT*3, 1, infile);
+    if(ret == 0)
+    {
+        if(ferror(infile))
+        {
+            printf("\nERROR2: Can not read the pixel data.\n");
+            free(image_buffer);
+            fclose(infile);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+
+/* Step 1: allocate and initialize JPEG compression object */
+    cinfo.err = jpeg_std_error(&jerr);
+    //init
+    jpeg_create_compress(&cinfo);
+
+/* Step 2: specify data destination (eg, a file) */
+    if ((outfile = fopen(jpg_filename, "wb")) == NULL) {
+        fprintf(stderr, "can't open %s\n", jpg_filename);
+        exit(-1);
+    }
+    jpeg_stdio_dest(&cinfo, outfile);
+
+/* Step 3: set parameters for compression */
+    cinfo.image_width = image_width; 	/* image width and height, in pixels */
+    cinfo.image_height = image_height;
+    cinfo.input_components = 3;	/* # of color components per pixel */
+    cinfo.in_color_space = JCS_RGB; 	/* colorspace of input image */
+
+    //set default compression parameters.
+    jpeg_set_defaults(&cinfo);
+    //use of quality (quantization table) scaling:
+    jpeg_set_quality(&cinfo, quality, TRUE /* limit to baseline-JPEG values */);
+
+
+    /* Step 4: Start compressor */
+    //TRUE ensures that we will write a complete interchange-JPEG file.
+    jpeg_start_compress(&cinfo, TRUE);
+
+    /* Step 5: while (scan lines remain to be written) */
+    /*           jpeg_write_scanlines(...); */
+    /* Here we use the library's state variable cinfo.next_scanline as the
+     * loop counter, so that we don't have to keep track ourselves.
+     * To keep things simple, we pass one scanline per call; you can pass
+     * more if you wish, though.
+     */
+    row_stride = image_width * 3;	/* JSAMPLEs per row in image_buffer */
+    int jpegwt = -1;
+    while (cinfo.next_scanline < cinfo.image_height) {
+        /* jpeg_write_scanlines expects an array of pointers to scanlines.
+        * Here the array is only one element long, but you could pass
+        * more than one scanline at a time if that's more convenient.
+        */
+        row_pointer[0] = & image_buffer[cinfo.next_scanline * row_stride];
+        jpeg_write_scanlines(&cinfo, row_pointer, 1);
+    }
+
+    /* Step 6: Finish compression */
+    jpeg_finish_compress(&cinfo);
+    /* After finish_compress, we can close the output file. */
+    fclose(outfile);
+
+    /* Step 7: release JPEG compression object */
+    /* This is an important step since it will release a good deal of memory. */
+    jpeg_destroy_compress(&cinfo);
+
+
+}
+
+
 int main(int argc, char* argv[])
 {
     /*1. open video0 device*/
@@ -640,7 +657,7 @@ int main(int argc, char* argv[])
     /*5. 处理图片*/
     save_to_yuyv();
     yuyv_to_rgb24();
-
+    write_JPEG_file(output_fname_rgb_bmp, output_fname_jpg, JPEG_QUALITY);
 
     /*6. 关闭设备*/
     close_device();
