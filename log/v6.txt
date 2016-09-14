@@ -1,0 +1,7 @@
+v6:
+seperate the camera.c to main.c camera.c
+Note:
+	defination and declaration should be separated.
+	In header files, we couldn`t do the definations.
+	Defination in ont source file, and in headers, just "extern" the var.
+	In other source files, just "include" the headers.
