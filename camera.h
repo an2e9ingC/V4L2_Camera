@@ -12,11 +12,12 @@
 #include <linux/videodev2.h>
 #include <errno.h>
 #include <sys/mman.h>
+#include <string.h>
 
-#define PC_DEBUG   1// enable/disable debug on PC
-#define USE_FILE   2 // Enale / Disable use file to convert pictures
-#define JPEG_COMPRESS   3
-#define BMP_HEADER  4
+#define PC_DEBUG    // enable/disable debug on PC
+#define USE_FILE    // Enale / Disable use file to convert pictures
+#define JPEG_COMPRESS
+#define BMP_HEADER
 
 /* definations for captureing pictures*/
 #define REQ_BUFF_COUNT 5
@@ -26,14 +27,19 @@
 /* definations for JPEG/bmp  compression&encode*/
 #ifdef BMP_HEADER
 #define WORD unsigned short
-#define DWORD unsigned long
-typedef struct tagBITMAPFILEHEADER{
-    WORD    bfType;                // the flag of bmp, value is "BM"
-    DWORD    bfSize;                // size BMP file ,unit is bytes
-    DWORD    bfReserved;            // 0
-    DWORD    bfOffBits;             // must be 54
+#define DWORD unsigned int 
 
-}bit_map_file_header;
+#pragma pack(2)
+//这里需要指定对齐方式, 保证LCD收到的第18byte和22byte是需要的biWidth和biHeight
+
+typedef struct tagBITMAPFILEHEADER{
+    DWORD    bfSize;                // size BMP file ,unit is bytes 
+    DWORD    bfReserved;            // 0    
+    DWORD    bfOffBits;             // must be 54   
+    WORD    bfType;                // the flag of bmp, value is "BM",
+}bit_map_file_header;   //total 14byte
+#pragma pack
+
 
 typedef struct tagBITMAPINFOHEADER{
     DWORD    biSize;                // must be 0x28
@@ -47,7 +53,9 @@ typedef struct tagBITMAPINFOHEADER{
     DWORD    biYPelsPerMeter;   //
     DWORD    biClrUsed;             //
     DWORD    biClrImportant;        //
-}bit_map_info_header;
+}bit_map_info_header;   //total 40byte
+
+
 #endif
 
 #ifdef JPEG_COMPRESS
@@ -57,15 +65,8 @@ typedef struct tagBITMAPINFOHEADER{
 #include "jerror.h"
 #define JPEG_QUALITY 50 //the quality of JPEG
 JSAMPLE * image_buffer;	/* Points to large array of R,G,B-order data */
-
 #endif
 
-#ifdef PC_DEBUG
-extern char*  device_fname;
-extern int file_count;
-#else
-extern char*  device_fname;
-#endif
 
 /*files that may be used while dealing pictures
  * but when use share memory, these are useless.
@@ -75,6 +76,7 @@ extern char*  output_fname_rgb_bmp;
 extern char*  output_fname_jpg;
 #endif
 
+extern char* device_fname;
 extern int yuyv_out_fd;    //file description of out put .yuyv file
 extern char*  output_fname_yuyv; //yuyv file name
 extern int camera_fd; // file description of camera
@@ -115,5 +117,9 @@ int stop_capture(void); // 停止采集
 void close_camera(void);
 int device_init(void);
 void write_JPEG_file (char* bmp_filename, char* jpg_filename, int quality); //根据bmp文件和quality, 生成jpg文件jpg_filename);
+
+/*share memory*/
+int rgb24_to_shm(void* shm_addr); //put the rgb stream into share-memory instead of files
+void err_exit(char*);
 
 #endif

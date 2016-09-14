@@ -343,8 +343,8 @@ int yuyv_to_rgb_buffer(unsigned char*yuv, unsigned char*rgb,
 void set_bmp_header(bit_map_file_header *bf, bit_map_info_header *bi)
 {//Set bit_map_info_header
     bi->biSize = 40;
-    bi->biWidth = WIDTH;
-    bi->biHeight = HEIGHT;
+    bi->biWidth = WIDTH;	//18th 4byte
+    bi->biHeight = HEIGHT;	//22th 4byte
     bi->biPlanes = 1;
     bi->biBitCount = 24;
     bi->biCompression = 0;
@@ -391,9 +391,14 @@ int yuyv_to_rgb24(void)
     yuyv_to_rgb_buffer(yuyv_buf, rgb_buf, WIDTH, HEIGHT);   //把yuyv转化为rgb格式
 
     //添加文件头
+	printf("to rgb.file.\n");
     bit_map_file_header bf;
     bit_map_info_header bi;
+	printf("sizeof(bf) = %u.\n", sizeof(bf));
+	printf("sizeof(bi) = %u.\n", sizeof(bi));
     set_bmp_header(&bf, &bi);
+	printf("sizeof(bf) = %u.\n", sizeof(bf));
+	printf("sizeof(bi) = %u.\n", sizeof(bi));
 
 
     fwrite(&bf, 14, 1, rgb_fp);
@@ -406,6 +411,77 @@ int yuyv_to_rgb24(void)
 
 }
 
+int rgb24_to_shm(void* shm_addr)
+{
+    printf("---------------in rgb24_to_shm----------\n");
+    FILE* yuyv_fp =  fopen(output_fname_yuyv, "rb");
+    if(yuyv_fp == NULL){
+        perror("open yuyvfd");
+        exit(EXIT_FAILURE);
+    }
+
+    unsigned int yuyv_size = WIDTH*HEIGHT*2;
+    unsigned int rgb_size = WIDTH*HEIGHT*3;
+    unsigned char yuyv_buf[yuyv_size];  //缓存YUYV数据
+    unsigned char rgb_buf[rgb_size+54];    //缓存RGB数据,3中颜色+54个字节的文件头
+
+    //读
+    size_t rdsz = fread(yuyv_buf, sizeof(yuyv_buf[0]), yuyv_size, yuyv_fp);
+    if(rdsz < 0){
+        printf("read nothing.\n");
+        return -1;
+    }else{
+        printf("read %ld kB.\n",rdsz/1024 );
+    }
+
+    yuyv_to_rgb_buffer(yuyv_buf, rgb_buf, WIDTH, HEIGHT);   //把yuyv转化为rgb格式
+
+    //添加文件头
+    bit_map_file_header bf;
+    bit_map_info_header bi;
+	printf("sizeof(bf) = %u.\n", sizeof(bf));
+	printf("sizeof(bi) = %u.\n", sizeof(bi));
+    set_bmp_header(&bf, &bi);
+	printf("sizeof(bf) = %d.\n", sizeof(bf));
+	printf("sizeof(bi) = %d.\n", sizeof(bi));
+	
+
+	//把头加入到共享内存 ,,  注意在 
+    memcpy(shm_addr, &bf, 14);
+    memcpy(shm_addr+14, &bi, 40);
+
+	// 吧数据加入
+    int i = sizeof(rgb_buf);
+    printf("rgb_buf size = %d Byte \n", i);
+    if( memcpy(shm_addr+54, rgb_buf, i) < 0){
+        err_exit("strncat rgb_buf");
+    }
+    printf("---------------strcat2 ok----------\n");
+
+    FILE* rgb_fp =  fopen(output_fname_rgb_bmp, "wb+");
+    if(rgb_fp == NULL){
+        perror("open rgb_fp");
+        exit(EXIT_FAILURE);
+    }
+    printf("rgb24_to_bmpfile : open file ok.\n");
+	char bmp_buf[WIDTH*HEIGHT*3+55] ={0	};
+	memcpy(bmp_buf, shm_addr, WIDTH*HEIGHT*3+54);
+	size_t fw =	fwrite(bmp_buf, sizeof(bmp_buf), 1, rgb_fp);
+	if(fw < 0){
+		printf("fw = %d\n", fw);
+		err_exit("fwrite");
+	}
+
+
+    if( shmdt(shm_addr) < 0){
+        err_exit("shmdt");
+    }
+    printf("---------------shmdt ok----------\n");
+
+    fclose(yuyv_fp);
+    printf("---------------out rgb24_to_shm----------\n");
+
+}
 
 int stop_capture(void)
 {// 停止采集
